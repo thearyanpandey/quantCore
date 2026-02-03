@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>QuantCore Live Dashboard</title>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { font-family: 'Courier New', monospace; background: #1a1a1a; color: #00ff00; padding: 20px; }
+        .container { display: grid; grid-template-columns: 2fr 1fr; gap: 20px; }
+        .card { background: #2d2d2d; padding: 20px; border-radius: 8px; border: 1px solid #444; }
+        h2 { margin-top: 0; color: #fff; }
+        #log { height: 300px; overflow-y: scroll; font-size: 12px; }
+        .buy { color: #00ff00; font-weight: bold; }
+        .sell { color: #ff0000; font-weight: bold; }
+        .price-display { font-size: 2em; color: white; }
+    </style>
+</head>
+<body>
+    <h1>⚡ QuantCore Distributed System</h1>
+    
+    <div class="container">
+        <div class="card">
+            <h2>BTC/USDT Live</h2>
+            <div class="price-display" id="current-price">Connecting...</div>
+            <canvas id="priceChart"></canvas>
+        </div>
+
+        <div class="card">
+            <h2>AI Trade Signals</h2>
+            <div id="log">Waiting for signals...</div>
+        </div>
+    </div>
+
+    <script>
+        const socket = io();
+        const priceEl = document.getElementById('current-price');
+        const logEl = document.getElementById('log');
+
+        // Setup Chart
+        const ctx = document.getElementById('priceChart').getContext('2d');
+        const chart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'Price (USD)',
+                    data: [],
+                    borderColor: '#00ff00',
+                    borderWidth: 1,
+                    pointRadius: 0,
+                    tension: 0.1
+                }]
+            },
+            options: {
+                animation: false,
+                scales: { x: { display: false } } // Hide time axis for clean look
+            }
+        });
+
+        // 1. Listen for Market Ticks
+        socket.on('market_tick', (data) => {
+            if (data.symbol === 'BTCUSDT') {
+                priceEl.innerText = `$${data.price.toFixed(2)}`;
+                
+                // Update Chart
+                if (chart.data.labels.length > 50) {
+                    chart.data.labels.shift();
+                    chart.data.datasets[0].data.shift();
+                }
+                chart.data.labels.push(new Date().toLocaleTimeString());
+                chart.data.datasets[0].data.push(data.price);
+                chart.update();
+            }
+        });
+
+        // 2. Listen for Trade Signals
+        let lastSignalId = "";
+        socket.on('trade_signal', (data) => {
+            if (data.id === lastSignalId) return; // Ignore dupes from polling
+            lastSignalId = data.id;
+
+            const div = document.createElement('div');
+            const colorClass = data.action === 'BUY' ? 'buy' : 'sell';
+            div.innerHTML = `[${new Date(data.timestamp * 1000).toLocaleTimeString()}] <span class="${colorClass}">${data.action}</span> ${data.symbol} @ $${data.price}`;
+            logEl.prepend(div);
+        });
+    </script>
+</body>
+</html>
